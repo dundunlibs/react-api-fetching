@@ -1,6 +1,6 @@
 {
   "name": "react-api-fetching",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "Make fetching API easier with React's hooks + context",
   "source": "src/index.tsx",
   "main": "dist/main.js",

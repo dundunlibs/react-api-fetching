@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useReducer, useRef } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from 'react'
 
 const isObj = (obj: unknown): obj is object => (
   typeof obj === 'object' &&
@@ -22,6 +22,17 @@ function useValueRef<T>(value: T) {
   const ref = useRef(value)
   if (ref.current !== value) ref.current = value
   return ref
+}
+
+function useMemoValue<T>(value: T) {
+  const ref = useRef(value)
+
+  return useMemo(() => {
+    if (JSON.stringify(value) !== JSON.stringify(ref.current)) {
+      ref.current = value
+    }
+    return ref.current
+  }, [value])
 }
 
 export type ApiVariables<T extends Partial<Record<'body' | 'query' | 'body', any>> = {}> = T
@@ -136,8 +147,9 @@ function createUseApi<
     TApiVariables extends TVariables[K]
   >(key: K, opts: UseLazyApiOptions<TApiVariables> = {}) {
     const [fetch, result] =  useLazyApi<K, TApiData, TApiError, TApiVariables>(key, opts)
+    const latestVariables = useMemoValue(opts.variables)
 
-    useEffect(() => { fetch() }, [fetch])
+    useEffect(() => { fetch() }, [fetch, latestVariables])
 
     return result
   }
