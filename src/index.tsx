@@ -75,8 +75,10 @@ const defaultResult: ApiResult = {
   error: undefined
 }
 
-interface UseLazyApiOptions<TVariables> {
+interface UseLazyApiOptions<TData, TError, TVariables> {
   variables?: TVariables
+  onFetch?: () => void
+  onCompleted?: (params: { data: TData | null, error: TError | null }) => void
 }
 
 function createUseLazyApi<
@@ -90,15 +92,22 @@ function createUseLazyApi<
     TApiData extends TData[K],
     TApiError extends TError[K],
     TApiVariables extends TVariables[K]
-  >(key: K, defaultOpts: UseLazyApiOptions<TApiVariables> = {}) {
+  >(key: K, defaultOpts: UseLazyApiOptions<TApiData, TApiError, TApiVariables> = {}) {
     const defaultOptsRef = useValueRef(defaultOpts)
     const api = apis[key]
     const { fetcher } = useContext(ctx)
 
     const [result, setResult] = useReducer(reducer as typeof reducer<TApiData, TApiError>, defaultResult)
 
-    const fetch = useCallback(async (opts: UseLazyApiOptions<TApiVariables> = {}) => {
-      const { variables = {} } = deepMerge(defaultOptsRef.current, opts)
+    const fetch = useCallback(async (opts: Pick<UseLazyApiOptions<TApiData, TApiError, TApiVariables>, 'variables'> = {}) => {
+      const {
+        onFetch,
+        onCompleted,
+        variables = {}
+      } = deepMerge(defaultOptsRef.current, opts)
+
+      if (onFetch) onFetch()
+
       setResult({ loading: true })
 
       let data = null, error = null
@@ -109,6 +118,9 @@ function createUseLazyApi<
       }
 
       setResult({ loading: false, data, error })
+
+      if (onCompleted) onCompleted({ data, error })
+
       return { data, error }
     }, [fetcher, api, setResult])
 
@@ -128,7 +140,7 @@ function createUseMutationApi<
     TApiData extends TData[K],
     TApiError extends TError[K],
     TApiVariables extends TVariables[K]
-  >(key: K, opts: UseLazyApiOptions<TApiVariables> = {}) {
+  >(key: K, opts: UseLazyApiOptions<TApiData, TApiError, TApiVariables> = {}) {
     return useLazyApi<K, TApiData, TApiError, TApiVariables>(key, opts)
   }
 }
@@ -145,13 +157,23 @@ function createUseApi<
     TApiData extends TData[K],
     TApiError extends TError[K],
     TApiVariables extends TVariables[K]
-  >(key: K, opts: UseLazyApiOptions<TApiVariables> = {}) {
-    const [fetch, result] =  useLazyApi<K, TApiData, TApiError, TApiVariables>(key, opts)
+  >(key: K, opts: UseLazyApiOptions<TApiData, TApiError, TApiVariables> = {}) {
+    const [loading, setLoading] = useReducer((_: boolean, s: boolean) => s, false)
+    const onFetch = useCallback(() => setLoading(true), [])
+    const onCompleted = useCallback(() => setLoading(false), [])
+    const [fetch, result] =  useLazyApi<K, TApiData, TApiError, TApiVariables>(key, {
+      ...opts,
+      onFetch,
+      onCompleted
+    })
     const latestVariables = useMemoValue(opts.variables)
 
     useEffect(() => { fetch() }, [fetch, latestVariables])
 
-    return result
+    return {
+      ...result,
+      loading
+    }
   }
 }
 
