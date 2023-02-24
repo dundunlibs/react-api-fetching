@@ -77,8 +77,8 @@ const defaultResult: ApiResult = {
 
 interface UseLazyApiOptions<TData, TError, TVariables> {
   variables?: TVariables
-  onFetch?: () => void
-  onCompleted?: (params: { data: TData | null, error: TError | null }) => void
+  onFetch?: () => Promise<any>
+  onCompleted?: (params: { data: TData | null, error: TError | null }) => Promise<any>
 }
 
 function createUseLazyApi<
@@ -106,7 +106,7 @@ function createUseLazyApi<
         variables = {}
       } = deepMerge(defaultOptsRef.current, opts)
 
-      if (onFetch) onFetch()
+      if (onFetch) await onFetch()
 
       setResult({ loading: true })
 
@@ -117,9 +117,9 @@ function createUseLazyApi<
         error = err as TApiError
       }
 
-      setResult({ loading: false, data, error })
+      if (onCompleted) await onCompleted({ data, error })
 
-      if (onCompleted) onCompleted({ data, error })
+      setResult({ loading: false, data, error })
 
       return { data, error }
     }, [fetcher, api, setResult])
@@ -145,6 +145,10 @@ function createUseMutationApi<
   }
 }
 
+interface UseApiOptions<TData, TError, TVariables> extends UseLazyApiOptions<TData, TError, TVariables> {
+  skip?: boolean
+}
+
 function createUseApi<
   T,
   TData extends Record<keyof T, any>,
@@ -157,22 +161,36 @@ function createUseApi<
     TApiData extends TData[K],
     TApiError extends TError[K],
     TApiVariables extends TVariables[K]
-  >(key: K, opts: UseLazyApiOptions<TApiData, TApiError, TApiVariables> = {}) {
-    const [loading, setLoading] = useReducer((_: boolean, s: boolean) => s, false)
-    const onFetch = useCallback(() => setLoading(true), [])
-    const onCompleted = useCallback(() => setLoading(false), [])
+  >(key: K, opts: UseApiOptions<TApiData, TApiError, TApiVariables> = {}) {
+    const { skip = false, ...lazyOpts } = opts
+
+    const calledRef = useRef(!skip)
+    const loadingRef = useRef(!skip)
+
+    const onFetch = useCallback(async () => {
+      calledRef.current = true
+      loadingRef.current = true
+    }, [])
+    const onCompleted = useCallback(async () => {
+      loadingRef.current = false
+    }, [])
     const [fetch, result] =  useLazyApi<K, TApiData, TApiError, TApiVariables>(key, {
-      ...opts,
+      ...lazyOpts,
       onFetch,
       onCompleted
     })
+
     const latestVariables = useMemoValue(opts.variables)
 
-    useEffect(() => { fetch() }, [fetch, latestVariables])
+    useEffect(() => {
+      if (skip) return
+      fetch()
+    }, [skip, fetch, latestVariables])
 
     return {
       ...result,
-      loading
+      loading: loadingRef.current,
+      called: calledRef.current
     }
   }
 }
