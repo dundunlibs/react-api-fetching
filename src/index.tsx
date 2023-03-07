@@ -75,7 +75,7 @@ const defaultResult: ApiResult = {
   error: undefined
 }
 
-interface UseLazyApiOptions<TData, TError, TVariables> {
+export interface UseLazyApiOptions<TData, TError, TVariables> {
   variables?: TVariables
   onFetch?: () => Promise<any>
   onCompleted?: (params: { data: TData | null, error: TError | null }) => Promise<any>
@@ -145,7 +145,7 @@ function createUseMutationApi<
   }
 }
 
-interface UseApiOptions<TData, TError, TVariables> extends UseLazyApiOptions<TData, TError, TVariables> {
+export interface UseApiOptions<TData, TError, TVariables> extends UseLazyApiOptions<TData, TError, TVariables> {
   skip?: boolean
 }
 
