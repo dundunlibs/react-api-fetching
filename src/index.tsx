@@ -1,39 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from 'react'
-
-const isObj = (obj: unknown): obj is object => (
-  typeof obj === 'object' &&
-  obj !== null &&
-  !Array.isArray(obj)
-)
-
-function deepMerge<T1, T2>(obj1: T1, obj2: T2) {
-  if (obj2 === undefined) return obj1 as T1 & T2
-  if (!isObj(obj1) || !isObj(obj2)) return obj2 as T1 & T2
-
-  const obj: Record<string, any> = { ...obj1 }
-  for (const [key, value] of Object.entries(obj2)) {
-    obj[key] = deepMerge(obj[key], value)
-  }
-
-  return obj as T1 & T2
-}
-
-function useValueRef<T>(value: T) {
-  const ref = useRef(value)
-  if (ref.current !== value) ref.current = value
-  return ref
-}
-
-function useMemoValue<T>(value: T) {
-  const ref = useRef(value)
-
-  return useMemo(() => {
-    if (JSON.stringify(value) !== JSON.stringify(ref.current)) {
-      ref.current = value
-    }
-    return ref.current
-  }, [value])
-}
+import { createContext, useCallback, useContext, useEffect, useReducer, useRef } from 'react'
+import { deepMerge } from './utils'
+import { useValueRef, useEnhancedMemo } from './hooks'
 
 export type ApiVariables<T extends Partial<Record<'body' | 'query' | 'body', any>> = {}> = T
 
@@ -180,7 +147,7 @@ function createUseApi<
       onCompleted
     })
 
-    const latestVariables = useMemoValue(opts.variables)
+    const latestVariables = useEnhancedMemo(opts.variables)
 
     useEffect(() => {
       if (skip) return
