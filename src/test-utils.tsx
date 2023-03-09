@@ -3,6 +3,7 @@ import {
   renderHook as _renderHook
 } from '@testing-library/react'
 import { createAPIs } from '.'
+import { Cache } from '.'
 import type { ApiVariables } from '.'
 import type { RenderHookOptions } from '@testing-library/react'
 
@@ -32,8 +33,17 @@ function fetcher<T>(api: string, variables: ApiVariables) {
   })
 }
 
+let cache = new Cache()
+
+export function resetCache() {
+  cache = new Cache()
+}
+
 const Wrapper: React.FC<React.PropsWithChildren> = ({ children }) => (
-  <Api.Provider config={{ fetcher }}>
+  <Api.Provider
+    config={{ fetcher }}
+    cache={cache}
+  >
     {children}
   </Api.Provider>
 )

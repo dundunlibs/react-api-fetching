@@ -1,10 +1,14 @@
 import { waitFor } from '@testing-library/react'
-import { fetch, Api, renderHook } from '../test-utils'
+import { fetch, Api, renderHook, resetCache } from '../test-utils'
 import type { UseApiOptions } from '..'
 
 describe('useLazyApi', () => {
+  beforeEach(() => {
+    resetCache()
+  })
+
   afterEach(() => {
-   jest.clearAllMocks()
+    jest.clearAllMocks()
   })
 
   it('lazy fetch data', async () => {

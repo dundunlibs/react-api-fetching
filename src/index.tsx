@@ -1,6 +1,8 @@
-import { createContext, useCallback, useContext, useEffect, useReducer, useRef } from 'react'
-import { deepMerge } from './utils'
-import { useValueRef, useEnhancedMemo } from './hooks'
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from 'react'
+import { deepEqual, deepMerge } from './utils'
+import { useValueRef, useEnhancedMemo, useCachedData } from './hooks'
+import { Cache } from './cache'
+export { Cache } from './cache'
 
 export type ApiVariables<T extends Partial<Record<'body' | 'query' | 'body', any>> = {}> = T
 
@@ -8,38 +10,34 @@ interface ApiConfig<APIs> {
   fetcher: <T>(api: APIs[keyof APIs], variables: ApiVariables) => Promise<T>
 }
 
+interface ApiContext<APIs> {
+  cache: Cache
+  config: ApiConfig<APIs>
+}
+
 type ApiProviderProps<T> = React.PropsWithChildren<{
+  cache?: Cache
   config: ApiConfig<T>
 }>
 
-function createProvider<T>(ctx: React.Context<ApiConfig<T>>) {
-  return function Provider({ config, children }: ApiProviderProps<T>) {
+function createProvider<T>(ctx: React.Context<ApiContext<T>>) {
+  return function Provider({
+    config,
+    children,
+    cache = new Cache(),
+  }: ApiProviderProps<T>) {
 
     return (
-      <ctx.Provider value={config}>
+      <ctx.Provider value={{ config, cache }}>
         {children}
       </ctx.Provider>
     )
   }
 }
 
-interface ApiResult<TData = any, TError = any> {
-  loading: boolean
-  data: TData | null | undefined
-  error: TError | null | undefined
-}
 
-function reducer<TData, TError>(state: ApiResult<TData, TError>, action: Partial<ApiResult<TData, TError>>) {
-  return {
-    ...state,
-    ...action
-  }
-}
-
-const defaultResult: ApiResult = {
-  loading: false,
-  data: undefined,
-  error: undefined
+function reducer<T>(_: T, action: T) {
+  return action
 }
 
 export interface UseLazyApiOptions<TData, TError, TVariables> {
@@ -53,7 +51,7 @@ function createUseLazyApi<
   TData extends Record<keyof T, any>,
   TError extends Record<keyof T, any>,
   TVariables extends Record<keyof T, any>
->(ctx: React.Context<ApiConfig<T>>, apis: T) {
+>(ctx: React.Context<ApiContext<T>>, apis: T) {
   return function useLazyApi<
     K extends keyof T,
     TApiData extends TData[K],
@@ -61,12 +59,18 @@ function createUseLazyApi<
     TApiVariables extends TVariables[K]
   >(key: K, defaultOpts: UseLazyApiOptions<TApiData, TApiError, TApiVariables> = {}) {
     const defaultOptsRef = useValueRef(defaultOpts)
-    const api = apis[key]
-    const { fetcher } = useContext(ctx)
-
-    const [result, setResult] = useReducer(reducer as typeof reducer<TApiData, TApiError>, defaultResult)
+    const {
+      cache,
+      config: { fetcher }
+    } = useContext(ctx)
+    const [variables, setVariables] = useReducer(reducer as typeof reducer<TApiVariables>, (defaultOpts.variables || {}) as TApiVariables)
+    const variablesRef = useValueRef(variables)
+    const cacheKey = useMemo(() => JSON.stringify([key, variables]), [key, variables])
+    const result = useCachedData(cacheKey, cache)
+    const prevResultRef = useRef({})
 
     const fetch = useCallback(async (opts: Pick<UseLazyApiOptions<TApiData, TApiError, TApiVariables>, 'variables'> = {}) => {
+      const api = apis[key]
       const {
         onFetch,
         onCompleted,
@@ -75,7 +79,15 @@ function createUseLazyApi<
 
       if (onFetch) await onFetch()
 
-      setResult({ loading: true })
+      const cacheKey = JSON.stringify([key, variables])
+      cache.set(cacheKey, {
+        ...cache.get(cacheKey),
+        loading: true
+      })
+
+      if (!deepEqual(variables, variablesRef.current)) {
+        setVariables(variables as TApiVariables)
+      }
 
       let data = null, error = null
       try {
@@ -86,12 +98,22 @@ function createUseLazyApi<
 
       if (onCompleted) await onCompleted({ data, error })
 
-      setResult({ loading: false, data, error })
+      prevResultRef.current = { data, error }
+
+      cache.set(cacheKey, {
+        loading: false,
+        data,
+        error
+      })
 
       return { data, error }
-    }, [fetcher, api, setResult])
+    }, [key, cache, fetcher, setVariables])
 
-    return [fetch, { ...result, refetch: fetch }] as const
+    return [fetch, {
+      ...result,
+      ...(result.data === undefined && result.error === undefined && prevResultRef.current),
+      refetch: fetch
+    }] as const
   }
 }
 
@@ -100,7 +122,7 @@ function createUseMutationApi<
   TData extends Record<keyof T, any>,
   TError extends Record<keyof T, any>,
   TVariables extends Record<keyof T, any>
->(ctx: React.Context<ApiConfig<T>>, apis: T) {
+>(ctx: React.Context<ApiContext<T>>, apis: T) {
   const useLazyApi = createUseLazyApi<T, TData, TError, TVariables>(ctx, apis)
   return function useMutationApi<
     K extends keyof T,
@@ -121,7 +143,7 @@ function createUseApi<
   TData extends Record<keyof T, any>,
   TError extends Record<keyof T, any>,
   TVariables extends Record<keyof T, any>
->(ctx: React.Context<ApiConfig<T>>, apis: T) {
+>(ctx: React.Context<ApiContext<T>>, apis: T) {
   const useLazyApi = createUseLazyApi<T, TData, TError, TVariables>(ctx, apis)
   return function useApi<
     K extends keyof T,
@@ -172,8 +194,11 @@ export function createAPIs<
   TError extends Record<keyof T, any> = any,
   TVariables extends Record<keyof T, any> = any
 >(apis: T) {
-  const ctx = createContext<ApiConfig<T>>({
-    fetcher: missingFetcher
+  const ctx = createContext<ApiContext<T>>({
+    cache: new Cache(),
+    config: {
+      fetcher: missingFetcher
+    },
   })
 
   return {

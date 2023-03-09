@@ -1,10 +1,14 @@
 import { waitFor } from '@testing-library/react'
-import { fetch, Api, renderHook } from '../test-utils'
+import { fetch, Api, renderHook, resetCache } from '../test-utils'
 import type { UseApiOptions } from '..'
 
 describe('useApi', () => {
+  beforeEach(() => {
+    resetCache()
+  })
+
   afterEach(() => {
-   jest.clearAllMocks()
+    jest.clearAllMocks()
   })
 
   it('automatically fetch data', async () => {
@@ -34,6 +38,9 @@ describe('useApi', () => {
     const { result, rerender } = renderHook((opts: UseApiOptions<any, any, any>) => Api.useApi('USERS', opts), {
       initialProps: { skip: true }
     })
+
+    await waitFor(() => new Promise(r => setTimeout(r, 100)))
+
     expect(result.current.called).toBeFalsy()
     expect(result.current.loading).toBeFalsy()
     expect(result.current.data).toBeUndefined()
