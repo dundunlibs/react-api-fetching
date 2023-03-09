@@ -1,4 +1,5 @@
-import { useMemo, useRef } from "react"
+import { useMemo, useReducer, useRef } from "react"
+import { deepEqual } from "./utils"
 
 export function useValueRef<T>(value: T) {
   const ref = useRef(value)
@@ -10,9 +11,15 @@ export function useEnhancedMemo<T>(value: T) {
   const ref = useRef(value)
 
   return useMemo(() => {
-    if (JSON.stringify(value) !== JSON.stringify(ref.current)) {
+    if (!deepEqual(ref.current, value)) {
       ref.current = value
     }
     return ref.current
   }, [value])
+}
+
+const rerenderReducer = (s: number) => s + 1
+export function useRerender() {
+  const [, rerender] = useReducer(rerenderReducer, 0)
+  return rerender
 }
