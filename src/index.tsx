@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from 'react'
 import { deepEqual, deepMerge, generateCacheKey, generateConcurrentFn, isCached } from './utils'
 import { useValueRef, useEnhancedMemo, useCachedData } from './hooks'
-import { Cache } from './cache'
+import { ApiResult, Cache } from './cache'
 export { Cache } from './cache'
 
 export type ApiVariables<T extends Partial<Record<'body' | 'query' | 'body', any>> = {}> = T
@@ -76,7 +76,7 @@ function createUseLazyApi<
     const [variables, setVariables] = useReducer(reducer as typeof reducer<TApiVariables>, (defaultOpts.variables || {}) as TApiVariables)
     const variablesRef = useValueRef(variables)
     const cacheKey = useMemo(() => generateCacheKey(key, variables), [key, variables])
-    const result = useCachedData(cacheKey, cache)
+    const result = useCachedData(cacheKey, cache) as ApiResult<TApiData, TApiError>
     const prevResultRef = useRef({})
 
     const fetch = useCallback(async (opts: Pick<UseLazyApiOptions<TApiData, TApiError, TApiVariables>, 'variables'> = {}) => {
