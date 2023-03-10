@@ -1,4 +1,5 @@
-import { deepMerge, deepEqual } from "../utils";
+import { waitFor } from "@testing-library/react";
+import { deepMerge, deepEqual, generateConcurrentFn } from "../utils";
 
 describe('deepMerge', () => {
   it('merge 2 normal objects', () => {
@@ -55,5 +56,57 @@ describe('deepEqual', () => {
     const a = { foo: 1, bar: { a: 1, b: { c: [1,2,3], d: {} } } }
     const b = {bar: { b: { c: [1,2,3], d: {} }, a: 1 }, foo: 1 }
     expect(deepEqual(a, b)).toBeTruthy()
+  })
+})
+
+describe('generateConcurrentFn', () => {
+  const fn = jest.fn()
+  const asyncFn = (...args: any) => new Promise(resolve => setTimeout(() => {
+    fn(args)
+    resolve(args)
+  }, 10))
+  const conFn = generateConcurrentFn(asyncFn)
+
+  afterEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it ('call 2 functions with same args at the same time', async () => {
+    let r1: any, r2: any
+    conFn(1, 2).then(r => r1 = r)
+    conFn(1, 2).then(r => r2 = r)
+
+    await waitFor(() => {
+      expect(r1).toEqual([1, 2])
+      expect(r2).toEqual([1, 2])
+    })
+
+    expect(fn).toHaveBeenCalledTimes(1)
+  })
+
+  it ('call 2 functions with same args at 2 different times', async () => {
+    let r1: any, r2: any
+    conFn(1, 2).then(r => r1 = r)
+    await waitFor(() => expect(r1).toEqual([1, 2]))
+
+    conFn(1, 2).then(r => r2 = r)
+    await waitFor(() => expect(r2).toEqual([1, 2]))
+
+    expect(fn).toHaveBeenCalledTimes(2)
+  })
+
+  it ('call 2 functions with same args and 1 function with different args at the same time', async () => {
+    let r1: any, r2: any, r3: any
+    conFn(1, 2).then(r => r1 = r)
+    conFn(1, 2).then(r => r2 = r)
+    conFn(3).then(r => r3 = r)
+
+    await waitFor(() => {
+      expect(r1).toEqual([1, 2])
+      expect(r2).toEqual([1, 2])
+      expect(r3).toEqual([3])
+    })
+
+    expect(fn).toHaveBeenCalledTimes(2)
   })
 })

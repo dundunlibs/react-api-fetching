@@ -28,7 +28,7 @@ export const fetch = jest.fn()
 
 function fetcher<T>(api: string, variables: ApiVariables) {
   fetch(api, variables)
-  return new Promise<T>((resolve, reject) => {
+  return new Promise<T>(resolve => {
     setTimeout(() => resolve(RESPONSES[api as keyof typeof RESPONSES] as T), 50);
   })
 }

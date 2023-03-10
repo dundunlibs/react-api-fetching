@@ -1,5 +1,5 @@
 import { waitFor } from '@testing-library/react'
-import { fetch, Api, renderHook, resetCache } from '../test-utils'
+import { fetch, Api, render, renderHook, resetCache } from '../test-utils'
 import type { UseApiOptions } from '..'
 
 describe('useApi', () => {
@@ -161,5 +161,22 @@ describe('useApi', () => {
       expect(hook2.result.current.loading).toBeFalsy()
       expect(hook2.result.current.data).toBe(hook1.result.current.data)
     })
+  })
+
+  it ("ensure fetch be called once at the same time", async () => {
+    let r1: any, r2: any
+    const Component = () => {
+      r1 = Api.useApi('USERS')
+      r2 = Api.useApi('USERS')
+      return null
+    }
+    render(<Component />)
+
+    await waitFor(() => {
+      expect(r1.data).not.toBeUndefined()
+      expect(r2.data).not.toBeUndefined()
+    })
+
+    expect(fetch).toHaveBeenCalledTimes(1)
   })
 })

@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from 'react'
-import { deepEqual, deepMerge, generateCacheKey, isCached } from './utils'
+import { deepEqual, deepMerge, generateCacheKey, generateConcurrentFn, isCached } from './utils'
 import { useValueRef, useEnhancedMemo, useCachedData } from './hooks'
 import { Cache } from './cache'
 export { Cache } from './cache'
@@ -7,7 +7,7 @@ export { Cache } from './cache'
 export type ApiVariables<T extends Partial<Record<'body' | 'query' | 'body', any>> = {}> = T
 
 interface ApiConfig<APIs> {
-  fetcher: <T>(api: APIs[keyof APIs], variables: ApiVariables) => Promise<T>
+  fetcher: (api: APIs[keyof APIs], variables: ApiVariables) => Promise<unknown>
 }
 
 interface ApiContext<APIs> {
@@ -26,9 +26,19 @@ function createProvider<T>(ctx: React.Context<ApiContext<T>>) {
     children,
     cache = new Cache(),
   }: ApiProviderProps<T>) {
+    const { fetcher } = config
+    const concurrentFetcher = useMemo(() => generateConcurrentFn(fetcher), [fetcher])
 
     return (
-      <ctx.Provider value={{ config, cache }}>
+      <ctx.Provider
+        value={{
+          cache,
+          config: {
+            ...config,
+            fetcher: concurrentFetcher
+          }
+        }}
+      >
         {children}
       </ctx.Provider>
     )
@@ -76,12 +86,13 @@ function createUseLazyApi<
         onCompleted,
         variables = {}
       } = deepMerge(defaultOptsRef.current, opts)
+      const cacheKey = generateCacheKey(key, variables)
+      const cacheData = cache.get(cacheKey)
 
       if (onFetch) await onFetch()
 
-      const cacheKey = generateCacheKey(key, variables)
       cache.set(cacheKey, {
-        ...cache.get(cacheKey),
+        ...cacheData,
         loading: true
       })
 

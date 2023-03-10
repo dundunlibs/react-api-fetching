@@ -59,3 +59,33 @@ export function isCached(key: any, cache: Cache) {
   const { data, error } = cache.get(key)
   return !(data === undefined && error === undefined)
 }
+
+export function generateConcurrentFn<T extends (...args: any) => any>(fn: T) {
+  const subscriptions: Record<string, {
+    resolve: (value: unknown) => void
+    reject: (reason: unknown) => void
+  }[]> = {}
+
+  return (...args: Parameters<T>) => new Promise(async (resolve, reject) => {
+    const key = JSON.stringify(args)
+    subscriptions[key] ||= []
+    const isEmpty = subscriptions[key].length === 0
+
+    subscriptions[key].push({ reject, resolve })
+
+    if (isEmpty) {
+      try {
+        const data = await fn(...args as any)
+        while(subscriptions[key].length > 0) {
+          const s = subscriptions[key].pop()
+          s?.resolve(data)
+        }
+      } catch(error) {
+        while(subscriptions[key].length > 0) {
+          const s = subscriptions[key].pop()
+          s?.reject(error)
+        }
+      }
+    }
+  }) as ReturnType<T>
+}
