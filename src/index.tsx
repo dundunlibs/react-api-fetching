@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from 'react'
-import { deepEqual, deepMerge } from './utils'
+import { deepEqual, deepMerge, generateCacheKey, isCached } from './utils'
 import { useValueRef, useEnhancedMemo, useCachedData } from './hooks'
 import { Cache } from './cache'
 export { Cache } from './cache'
@@ -65,7 +65,7 @@ function createUseLazyApi<
     } = useContext(ctx)
     const [variables, setVariables] = useReducer(reducer as typeof reducer<TApiVariables>, (defaultOpts.variables || {}) as TApiVariables)
     const variablesRef = useValueRef(variables)
-    const cacheKey = useMemo(() => JSON.stringify([key, variables]), [key, variables])
+    const cacheKey = useMemo(() => generateCacheKey(key, variables), [key, variables])
     const result = useCachedData(cacheKey, cache)
     const prevResultRef = useRef({})
 
@@ -79,7 +79,7 @@ function createUseLazyApi<
 
       if (onFetch) await onFetch()
 
-      const cacheKey = JSON.stringify([key, variables])
+      const cacheKey = generateCacheKey(key, variables)
       cache.set(cacheKey, {
         ...cache.get(cacheKey),
         loading: true
@@ -111,7 +111,7 @@ function createUseLazyApi<
 
     return [fetch, {
       ...result,
-      ...(result.data === undefined && result.error === undefined && prevResultRef.current),
+      ...(!isCached(cacheKey, cache) && prevResultRef.current),
       refetch: fetch
     }] as const
   }
@@ -136,6 +136,7 @@ function createUseMutationApi<
 
 export interface UseApiOptions<TData, TError, TVariables> extends UseLazyApiOptions<TData, TError, TVariables> {
   skip?: boolean
+  force?: boolean
 }
 
 function createUseApi<
@@ -151,10 +152,19 @@ function createUseApi<
     TApiError extends TError[K],
     TApiVariables extends TVariables[K]
   >(key: K, opts: UseApiOptions<TApiData, TApiError, TApiVariables> = {}) {
-    const { skip = false, ...lazyOpts } = opts
+    const { cache } = useContext(ctx)
+    const {
+      skip = false,
+      force = false,
+      ...lazyOpts
+    } = opts
 
-    const calledRef = useRef(!skip)
-    const loadingRef = useRef(!skip)
+    const latestVariables = useEnhancedMemo(opts.variables)
+    const cacheKey = useMemo(() => generateCacheKey(key, latestVariables), [key, latestVariables])
+    const cached = useMemo(() => isCached(cacheKey, cache), [cacheKey, cache])
+
+    const calledRef = useRef(!skip || cached)
+    const loadingRef = useRef(!skip && !cached)
 
     const onFetch = useCallback(async () => {
       calledRef.current = true
@@ -169,12 +179,11 @@ function createUseApi<
       onCompleted
     })
 
-    const latestVariables = useEnhancedMemo(opts.variables)
-
     useEffect(() => {
       if (skip) return
+      if (!force && isCached(cacheKey, cache)) return
       fetch()
-    }, [skip, fetch, latestVariables])
+    }, [skip, force, fetch, key, cacheKey, cache])
 
     return {
       ...result,

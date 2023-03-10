@@ -124,4 +124,42 @@ describe('useApi', () => {
     expect(result.current.data).toBe(latestData)
     expect(fetch).toHaveBeenCalledTimes(1)
   })
+
+  it ("don't fetch if result is already cached", async () => {
+    const hook1 = renderHook(() => Api.useApi('USERS'))
+
+    await waitFor(() => expect(hook1.result.current.data).not.toBeUndefined())
+
+    const hook2 = renderHook(() => Api.useApi('USERS'))
+
+    expect(hook2.result.current.called).toBeTruthy()
+    expect(hook2.result.current.loading).toBeFalsy()
+    expect(hook2.result.current.data).toBe(hook1.result.current.data)
+
+    await waitFor(() => new Promise(r => setTimeout(r, 500)))
+
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it ("force fetch be called if force option is true", async () => {
+    const hook1 = renderHook(() => Api.useApi('USERS'))
+
+    await waitFor(() => expect(hook1.result.current.data).not.toBeUndefined())
+
+    const hook2 = renderHook(() => Api.useApi('USERS', {
+      force: true
+    }))
+
+    await waitFor(() => {
+      expect(hook2.result.current.loading).toBeTruthy()
+      expect(hook2.result.current.data).toBe(hook1.result.current.data)
+    })
+
+    expect(fetch).toHaveBeenCalledTimes(2)
+
+    await waitFor(() => {
+      expect(hook2.result.current.loading).toBeFalsy()
+      expect(hook2.result.current.data).toBe(hook1.result.current.data)
+    })
+  })
 })
