@@ -1,10 +1,12 @@
+import { deepEqual } from "./utils"
+
 export interface ApiResult<TData = any, TError = any> {
   loading: boolean
   data: TData | null | undefined
   error: TError | null | undefined
 }
 
-const defaultResult: ApiResult = {
+export const defaultResult: ApiResult = {
   loading: false,
   data: undefined,
   error: undefined
@@ -19,6 +21,7 @@ export class Cache {
   }
 
   set = <TData, TError>(key: string, value: ApiResult<TData, TError>) => {
+    if (deepEqual(this.data[key], value)) return
     this.data[key] = value
     this.subscriptions[key]?.forEach(callback => callback())
   }
@@ -34,4 +37,13 @@ export class Cache {
     const idx = this.subscriptions[key].indexOf(callback)
     if (idx > -1) this.subscriptions[key].splice(idx, 1)
   }
+}
+
+export function generateCacheKey(key: any, variables: any) {
+  return JSON.stringify([key, variables || {}])
+}
+
+export function isCached(key: any, cache: Cache) {
+  const { data, error } = cache.get(key)
+  return !(data === undefined && error === undefined)
 }

@@ -1,5 +1,3 @@
-import { Cache } from "./cache"
-
 export const canUseDOM = !!(
   typeof window !== 'undefined' &&
   window.document &&
@@ -49,15 +47,6 @@ export function deepEqual(obj1: any, obj2: any): boolean {
   } else {
     return obj1 === obj2
   }
-}
-
-export function generateCacheKey(key: any, variables: any) {
-  return JSON.stringify([key, variables || {}])
-}
-
-export function isCached(key: any, cache: Cache) {
-  const { data, error } = cache.get(key)
-  return !(data === undefined && error === undefined)
 }
 
 export function generateConcurrentFn<T extends (...args: any) => any>(fn: T) {

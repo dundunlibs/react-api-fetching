@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from 'react'
-import { deepEqual, deepMerge, generateCacheKey, generateConcurrentFn, isCached } from './utils'
+import { deepEqual, deepMerge, generateConcurrentFn } from './utils'
 import { useValueRef, useEnhancedMemo, useCachedData } from './hooks'
-import { ApiResult, Cache } from './cache'
+import { ApiResult, Cache, defaultResult, generateCacheKey, isCached } from './cache'
 export { Cache } from './cache'
 
 export type ApiVariables<T extends Partial<Record<'body' | 'query' | 'body', any>> = {}> = T
@@ -46,11 +46,19 @@ function createProvider<T>(ctx: React.Context<ApiContext<T>>) {
 }
 
 
-function reducer<T>(_: T, action: T) {
+function stateReducer<T>(_: T, action: T) {
   return action
 }
 
+function partialStateReducer<T extends {}>(s: T, action: Partial<T>) {
+  return {
+    ...s,
+    ...action
+  } as T
+}
+
 export interface UseLazyApiOptions<TData, TError, TVariables> {
+  cached?: boolean
   variables?: TVariables
   onFetch?: () => Promise<any>
   onCompleted?: (params: { data: TData | null, error: TError | null }) => Promise<any>
@@ -73,17 +81,20 @@ function createUseLazyApi<
       cache,
       config: { fetcher }
     } = useContext(ctx)
-    const [variables, setVariables] = useReducer(reducer as typeof reducer<TApiVariables>, (defaultOpts.variables || {}) as TApiVariables)
+    const [variables, setVariables] = useReducer(stateReducer as typeof stateReducer<TApiVariables>, (defaultOpts.variables || {}) as TApiVariables)
     const variablesRef = useValueRef(variables)
     const cacheKey = useMemo(() => generateCacheKey(key, variables), [key, variables])
-    const result = useCachedData(cacheKey, cache) as ApiResult<TApiData, TApiError>
+    const cachedResult = useCachedData(cacheKey, cache) as ApiResult<TApiData, TApiError>
+    const [localResult, setLocalResult] = useReducer(partialStateReducer as typeof partialStateReducer<ApiResult<TApiData, TApiError>>, defaultResult)
     const prevResultRef = useRef({})
+    const cachedRef = useRef(defaultOpts.cached ?? true)
 
     const fetch = useCallback(async (opts: Pick<UseLazyApiOptions<TApiData, TApiError, TApiVariables>, 'variables'> = {}) => {
       const api = apis[key]
       const {
         onFetch,
         onCompleted,
+        cached = true,
         variables = {}
       } = deepMerge(defaultOptsRef.current, opts)
       const cacheKey = generateCacheKey(key, variables)
@@ -91,12 +102,19 @@ function createUseLazyApi<
 
       if (onFetch) await onFetch()
 
-      cache.set(cacheKey, {
-        ...cacheData,
-        loading: true
-      })
+      cachedRef.current = cached
 
-      if (!deepEqual(variables, variablesRef.current)) {
+      if (cached) {
+        cache.set(cacheKey, {
+          ...cacheData,
+          loading: true
+        })
+      } else {
+        setLocalResult({ loading: true })
+      }
+
+      // if cached is true, we need to set new variables so that `useCachedData` can load data from the new key
+      if (cached && !deepEqual(variables, variablesRef.current)) {
         setVariables(variables as TApiVariables)
       }
 
@@ -111,18 +129,29 @@ function createUseLazyApi<
 
       prevResultRef.current = { data, error }
 
-      cache.set(cacheKey, {
-        loading: false,
-        data,
-        error
-      })
+      if (cached) {
+        cache.set(cacheKey, {
+          loading: false,
+          data,
+          error
+        })
+      } else {
+        setLocalResult({
+          loading: false,
+          data,
+          error
+        })
+      }
 
       return { data, error }
-    }, [key, cache, fetcher, setVariables])
+    }, [key, cache, fetcher, setVariables, setLocalResult])
 
     return [fetch, {
-      ...result,
-      ...(!isCached(cacheKey, cache) && prevResultRef.current),
+      ...(cachedRef.current ? {
+        ...cachedResult,
+        // when we changed variables, the cached result might be empty, but we want to keep showing the previous result
+        ...(!isCached(cacheKey, cache) && prevResultRef.current),
+      } : localResult),
       refetch: fetch
     }] as const
   }
@@ -141,7 +170,10 @@ function createUseMutationApi<
     TApiError extends TError[K],
     TApiVariables extends TVariables[K]
   >(key: K, opts: UseLazyApiOptions<TApiData, TApiError, TApiVariables> = {}) {
-    return useLazyApi<K, TApiData, TApiError, TApiVariables>(key, opts)
+    return useLazyApi<K, TApiData, TApiError, TApiVariables>(key, {
+      ...opts,
+      cached: false
+    })
   }
 }
 

@@ -1,5 +1,5 @@
 import { waitFor } from '@testing-library/react'
-import { fetch, Api, renderHook, resetCache } from '../test-utils'
+import { fetch, Api, renderHook, resetCache, cache } from '../test-utils'
 import type { UseApiOptions } from '..'
 
 describe('useLazyApi', () => {
@@ -16,7 +16,7 @@ describe('useLazyApi', () => {
 
     expect(result.current[1].loading).toBeFalsy()
     expect(result.current[1].data).toBeUndefined()
-    expect(result.current[1].data).toBeUndefined()
+    expect(result.current[1].error).toBeUndefined()
 
     waitFor(() => result.current[0]())
     await waitFor(() => new Promise(r => setTimeout(r, 10)))
@@ -38,6 +38,27 @@ describe('useLazyApi', () => {
         name: 'Bar'
       }
     ])
+  })
+
+  it('cached data', async () => {
+    const { result } = renderHook(() => Api.useLazyApi('USERS'))
+
+    await waitFor(() => result.current[0]())
+
+    expect(cache.get('["USERS",{}]')).toEqual({
+      loading: false,
+      error: null,
+      data: [
+        {
+          id: 1,
+          name: 'Foo'
+        },
+        {
+          id: 2,
+          name: 'Bar'
+        }
+      ]
+    })
   })
 
   it("fetch data with variables", async () => {

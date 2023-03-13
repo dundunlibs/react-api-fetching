@@ -33,7 +33,7 @@ function fetcher<T>(api: string, variables: ApiVariables) {
   })
 }
 
-let cache = new Cache()
+export let cache = new Cache()
 
 export function resetCache() {
   cache = new Cache()
