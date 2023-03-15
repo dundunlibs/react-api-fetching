@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from 'react'
 import { deepEqual, deepMerge, generateConcurrentFn } from './utils'
-import { useValueRef, useEnhancedMemo, useCachedData } from './hooks'
+import { useValueRef, useEnhancedMemo, useCachedData, useEnhancedEffect } from './hooks'
 import { ApiResult, Cache, defaultResult, generateCacheKey, isCached } from './cache'
 export { Cache } from './cache'
 
@@ -8,6 +8,8 @@ export type ApiVariables<T extends Partial<Record<'body' | 'query' | 'body', any
 
 interface ApiConfig<APIs> {
   fetcher: (api: APIs[keyof APIs], variables: ApiVariables) => Promise<unknown>
+  refetchOnFocus?: boolean
+  useFocused?: () => boolean
 }
 
 interface ApiContext<APIs> {
@@ -20,13 +22,21 @@ type ApiProviderProps<T> = React.PropsWithChildren<{
   config: ApiConfig<T>
 }>
 
+function useDefaultFocused() {
+  return true
+}
+
 function createProvider<T>(ctx: React.Context<ApiContext<T>>) {
   return function Provider({
     config,
     children,
     cache = new Cache(),
   }: ApiProviderProps<T>) {
-    const { fetcher } = config
+    const {
+      fetcher,
+      refetchOnFocus = true,
+      useFocused = useDefaultFocused
+    } = config
     const concurrentFetcher = useMemo(() => generateConcurrentFn(fetcher), [fetcher])
 
     return (
@@ -35,6 +45,8 @@ function createProvider<T>(ctx: React.Context<ApiContext<T>>) {
           cache,
           config: {
             ...config,
+            useFocused,
+            refetchOnFocus,
             fetcher: concurrentFetcher
           }
         }}
@@ -59,6 +71,7 @@ function partialStateReducer<T extends {}>(s: T, action: Partial<T>) {
 
 export interface UseLazyApiOptions<TData, TError, TVariables> {
   cached?: boolean
+  refetchOnFocus?: boolean
   variables?: TVariables
   onFetch?: () => Promise<any>
   onCompleted?: (params: { data: TData | null, error: TError | null }) => Promise<any>
@@ -76,10 +89,11 @@ function createUseLazyApi<
     TApiError extends TError[K],
     TApiVariables extends TVariables[K]
   >(key: K, defaultOpts: UseLazyApiOptions<TApiData, TApiError, TApiVariables> = {}) {
+    const fetchedRef = useRef(false)
     const defaultOptsRef = useValueRef(defaultOpts)
     const {
       cache,
-      config: { fetcher }
+      config: { fetcher, refetchOnFocus, useFocused }
     } = useContext(ctx)
     const [variables, setVariables] = useReducer(stateReducer as typeof stateReducer<TApiVariables>, (defaultOpts.variables || {}) as TApiVariables)
     const variablesRef = useValueRef(variables)
@@ -87,6 +101,7 @@ function createUseLazyApi<
     const cachedResult = useCachedData(cacheKey, cache) as ApiResult<TApiData, TApiError>
     const [localResult, setLocalResult] = useReducer(partialStateReducer as typeof partialStateReducer<ApiResult<TApiData, TApiError>>, defaultResult)
     const prevResultRef = useRef({})
+    const prevVariablesRef = useRef<TApiVariables>()
     const cachedRef = useRef(defaultOpts.cached ?? true)
 
     const fetch = useCallback(async (opts: Pick<UseLazyApiOptions<TApiData, TApiError, TApiVariables>, 'variables'> = {}) => {
@@ -127,7 +142,9 @@ function createUseLazyApi<
 
       if (onCompleted) await onCompleted({ data, error })
 
+      fetchedRef.current = true
       prevResultRef.current = { data, error }
+      prevVariablesRef.current = variables as TApiVariables
 
       if (cached) {
         cache.set(cacheKey, {
@@ -146,13 +163,24 @@ function createUseLazyApi<
       return { data, error }
     }, [key, cache, fetcher, setVariables, setLocalResult])
 
+    const refetch = useCallback(() => fetch({ variables: prevVariablesRef.current }), [fetch])
+
+    /**
+     * automatically refetch on focus
+     */
+    const focused = useFocused!()
+    const refetchOnFocusRef = useRef(defaultOpts.refetchOnFocus ?? refetchOnFocus)
+    useEnhancedEffect(() => {
+      if (focused && refetchOnFocusRef.current && fetchedRef.current) refetch()
+    }, [focused, refetch])
+
     return [fetch, {
       ...(cachedRef.current ? {
         ...cachedResult,
         // when we changed variables, the cached result might be empty, but we want to keep showing the previous result
         ...(!isCached(cacheKey, cache) && prevResultRef.current),
       } : localResult),
-      refetch: fetch
+      refetch
     }] as const
   }
 }
@@ -172,7 +200,8 @@ function createUseMutationApi<
   >(key: K, opts: UseLazyApiOptions<TApiData, TApiError, TApiVariables> = {}) {
     return useLazyApi<K, TApiData, TApiError, TApiVariables>(key, {
       ...opts,
-      cached: false
+      cached: false,
+      refetchOnFocus: false
     })
   }
 }
