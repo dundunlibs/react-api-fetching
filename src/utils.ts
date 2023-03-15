@@ -57,7 +57,9 @@ export function generateConcurrentFn<T extends (...args: any) => any>(fn: T) {
 
   return (...args: Parameters<T>) => new Promise(async (resolve, reject) => {
     const key = JSON.stringify(args)
-    subscriptions[key] ||= []
+    if (!subscriptions[key]) {
+      subscriptions[key] = []
+    }
     const isEmpty = subscriptions[key].length === 0
 
     subscriptions[key].push({ reject, resolve })

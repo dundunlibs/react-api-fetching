@@ -27,13 +27,17 @@ export class Cache {
   }
 
   subscribe = (key: string, callback: () => void) => {
-    this.subscriptions[key] ||= []
+    if (!this.subscriptions[key]) {
+      this.subscriptions[key] = []
+    }
     if (this.subscriptions[key].indexOf(callback) > -1) return
     this.subscriptions[key].push(callback)
   }
 
   unsubscribe = (key: string, callback: () => void) => {
-    this.subscriptions[key] ||= []
+    if (!this.subscriptions[key]) {
+      this.subscriptions[key] = []
+    }
     const idx = this.subscriptions[key].indexOf(callback)
     if (idx > -1) this.subscriptions[key].splice(idx, 1)
   }
