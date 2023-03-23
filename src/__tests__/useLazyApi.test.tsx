@@ -62,7 +62,7 @@ describe('useLazyApi', () => {
   })
 
   it("fetch data with variables", async () => {
-    const { result } = renderHook((opts: UseApiOptions<any, any, any>) => Api.useLazyApi('USERS', opts), {
+    const { result } = renderHook((opts: UseApiOptions<any, any, any, any, any>) => Api.useLazyApi('USERS', opts), {
       initialProps: { variables: { query: { limit: 10 } } }
     })
 
@@ -78,9 +78,13 @@ describe('useLazyApi', () => {
   it("callback events", async () => {
     const onFetch = jest.fn()
     const onCompleted = jest.fn()
+    let revalidate
     const { result } = renderHook(() => Api.useLazyApi('USERS', {
       onFetch,
-      onCompleted
+      onCompleted: params => {
+        revalidate = params.revalidate
+        onCompleted(params)
+      }
     }))
 
     await waitFor(() => result.current[0]())
@@ -98,7 +102,8 @@ describe('useLazyApi', () => {
           name: 'Bar'
         }
       ],
-      error: null
+      error: null,
+      revalidate
     })
   })
 })

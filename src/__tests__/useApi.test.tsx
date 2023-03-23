@@ -35,7 +35,7 @@ describe('useApi', () => {
   })
 
   it("don't fetch data as default if skip is true", async () => {
-    const { result, rerender } = renderHook((opts: UseApiOptions<any, any, any>) => Api.useApi('USERS', opts), {
+    const { result, rerender } = renderHook((opts: UseApiOptions<any, any, any, any, any>) => Api.useApi('USERS', opts), {
       initialProps: { skip: true }
     })
 
@@ -62,7 +62,7 @@ describe('useApi', () => {
   })
 
   it("automatically refetch if variables changed", async () => {
-    const { result, rerender } = renderHook((opts: UseApiOptions<any, any, any>) => Api.useApi('USERS', opts), {
+    const { result, rerender } = renderHook((opts: UseApiOptions<any, any, any, any, any>) => Api.useApi('USERS', opts), {
       initialProps: {
         variables: {
           query: { limit: 10 }
@@ -99,7 +99,7 @@ describe('useApi', () => {
   })
 
   it("don't automatically refetch if variables equal with previous variables", async () => {
-    const { result, rerender } = renderHook((opts: UseApiOptions<any, any, any>) => Api.useApi('USERS', opts), {
+    const { result, rerender } = renderHook((opts: UseApiOptions<any, any, any, any, any>) => Api.useApi('USERS', opts), {
       initialProps: {
         variables: {
           query: { limit: 10 }
