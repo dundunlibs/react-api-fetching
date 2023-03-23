@@ -69,12 +69,81 @@ function partialStateReducer<T extends {}>(s: T, action: Partial<T>) {
   } as T
 }
 
-export interface UseLazyApiOptions<TData, TError, TVariables> {
+function createUseRevalidate<
+  T,
+  TData extends Record<keyof T, any>,
+  TError extends Record<keyof T, any>,
+  TVariables extends Record<keyof T, any>
+>(ctx: React.Context<ApiContext<T>>, apis: T) {
+  return function useRevalidate() {
+    const { cache, config: { fetcher } } = useContext(ctx)
+
+    const revalidate = useCallback(async function<
+      K extends keyof T,
+      TApiData extends TData[K],
+      TApiError extends TError[K],
+      TApiVariables extends TVariables[K]
+    >(key:K, variables: TApiVariables) {
+      const cacheKey = generateCacheKey(key, variables)
+      const cacheData = cache.get(cacheKey)
+
+      cache.set(cacheKey, {
+        ...cacheData,
+        loading: true
+      })
+
+      let data = null, error = null
+      try {
+        data = await fetcher!(apis[key], variables) as TApiData
+      } catch (err) {
+        error = err as TApiError
+      }
+
+      cache.set(cacheKey, {
+        loading: false,
+        data,
+        error
+      })
+
+      return { data, error }
+    }, [cache, fetcher])
+
+    return revalidate
+  }
+}
+
+interface OnCompletedParams<
+  T,
+  TData extends Record<keyof T, any>,
+  TError extends Record<keyof T, any>,
+  TVariables extends Record<keyof T, any>,
+  K extends keyof T
+> {
+  data: TData[K] | null,
+  error: TError[K] | null,
+  revalidate: <
+    X extends keyof T,
+    TApiData extends TData[X],
+    TApiError extends TError[X],
+    TApiVariables extends TVariables[X]
+  >(key: X, variables: TApiVariables) => Promise<{
+    data: TApiData | null;
+    error: TApiError | null;
+  }>
+}
+
+export interface UseLazyApiOptions<
+  T,
+  TData extends Record<keyof T, any>,
+  TError extends Record<keyof T, any>,
+  TVariables extends Record<keyof T, any>,
+  K extends keyof T
+> {
   cached?: boolean
   refetchOnFocus?: boolean
   variables?: TVariables
   onFetch?: () => Promise<any>
-  onCompleted?: (params: { data: TData | null, error: TError | null }) => Promise<any>
+  onCompleted?: (params: OnCompletedParams<T, TData, TError, TVariables, K>) => any
 }
 
 function createUseLazyApi<
@@ -83,12 +152,14 @@ function createUseLazyApi<
   TError extends Record<keyof T, any>,
   TVariables extends Record<keyof T, any>
 >(ctx: React.Context<ApiContext<T>>, apis: T) {
+  const useRevalidate = createUseRevalidate<T, TData, TError, TVariables>(ctx, apis)
   return function useLazyApi<
     K extends keyof T,
     TApiData extends TData[K],
     TApiError extends TError[K],
-    TApiVariables extends TVariables[K]
-  >(key: K, defaultOpts: UseLazyApiOptions<TApiData, TApiError, TApiVariables> = {}) {
+    TApiVariables extends TVariables[K],
+  >(key: K, defaultOpts: UseLazyApiOptions<T, TData, TError, TVariables, K> = {}) {
+    const revalidate = useRevalidate()
     const fetchedRef = useRef(false)
     const defaultOptsRef = useValueRef(defaultOpts)
     const {
@@ -104,7 +175,7 @@ function createUseLazyApi<
     const prevVariablesRef = useRef<TApiVariables>()
     const cachedRef = useRef(defaultOpts.cached ?? true)
 
-    const fetch = useCallback(async (opts: Pick<UseLazyApiOptions<TApiData, TApiError, TApiVariables>, 'variables'> = {}) => {
+    const fetch = useCallback(async (opts: Pick<UseLazyApiOptions<T, TData, TError, TVariables, K>, 'variables'> = {}) => {
       const api = apis[key]
       const {
         onFetch,
@@ -140,7 +211,7 @@ function createUseLazyApi<
         error = err as TApiError
       }
 
-      if (onCompleted) await onCompleted({ data, error })
+      if (onCompleted) await onCompleted({ data, error, revalidate })
 
       fetchedRef.current = true
       prevResultRef.current = { data, error }
@@ -161,7 +232,7 @@ function createUseLazyApi<
       }
 
       return { data, error }
-    }, [key, cache, fetcher, setVariables, setLocalResult])
+    }, [key, cache, fetcher, setVariables, setLocalResult, revalidate])
 
     const refetch = useCallback(() => fetch({ variables: prevVariablesRef.current }), [fetch])
 
@@ -197,7 +268,7 @@ function createUseMutationApi<
     TApiData extends TData[K],
     TApiError extends TError[K],
     TApiVariables extends TVariables[K]
-  >(key: K, opts: UseLazyApiOptions<TApiData, TApiError, TApiVariables> = {}) {
+  >(key: K, opts: UseLazyApiOptions<T, TData, TError, TVariables, K> = {}) {
     return useLazyApi<K, TApiData, TApiError, TApiVariables>(key, {
       ...opts,
       cached: false,
@@ -206,7 +277,13 @@ function createUseMutationApi<
   }
 }
 
-export interface UseApiOptions<TData, TError, TVariables> extends UseLazyApiOptions<TData, TError, TVariables> {
+export interface UseApiOptions<
+  T,
+  TData extends Record<keyof T, any>,
+  TError extends Record<keyof T, any>,
+  TVariables extends Record<keyof T, any>,
+  K extends keyof T
+> extends UseLazyApiOptions<T, TData, TError, TVariables, K> {
   skip?: boolean
   force?: boolean
 }
@@ -223,7 +300,7 @@ function createUseApi<
     TApiData extends TData[K],
     TApiError extends TError[K],
     TApiVariables extends TVariables[K]
-  >(key: K, opts: UseApiOptions<TApiData, TApiError, TApiVariables> = {}) {
+  >(key: K, opts: UseApiOptions<T, TData, TError, TVariables, K> = {}) {
     const { cache } = useContext(ctx)
     const {
       skip = false,
@@ -286,6 +363,7 @@ export function createAPIs<
     Provider: createProvider(ctx),
     useLazyApi: createUseLazyApi<T, TData, TError, TVariables>(ctx, apis),
     useMutationApi: createUseMutationApi<T, TData, TError, TVariables>(ctx, apis),
-    useApi: createUseApi<T, TData, TError, TVariables>(ctx, apis)
+    useApi: createUseApi<T, TData, TError, TVariables>(ctx, apis),
+    useRevalidate: createUseRevalidate<T, TData, TError, TVariables>(ctx, apis)
   }
 }
