@@ -78,11 +78,12 @@ describe('useLazyApi', () => {
   it("callback events", async () => {
     const onFetch = jest.fn()
     const onCompleted = jest.fn()
-    let revalidate
+    let revalidate, mutate
     const { result } = renderHook(() => Api.useLazyApi('USERS', {
       onFetch,
       onCompleted: params => {
         revalidate = params.revalidate
+        mutate = params.mutate
         onCompleted(params)
       }
     }))
@@ -103,6 +104,7 @@ describe('useLazyApi', () => {
         }
       ],
       error: null,
+      mutate,
       revalidate
     })
   })
