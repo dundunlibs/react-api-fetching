@@ -43,7 +43,7 @@ interface ApiConfig {
 }
 
 interface Variables {
-  path?: Record<string, string | number>
+  path?: Record<string | number, string>
   search?: any
   body?: any
 }
@@ -55,13 +55,13 @@ export async function fetcher (apiConfig: ApiConfig, variables: Variables) {
   const url = new URL(path, baseUrl)
 
   if ('path' in variables) {
-    for (const [key, value] of Object.entries(variables.body)) {
+    for (const [key, value] of Object.entries(variables.path)) {
       url.pathname = url.pathname.replace(`:${key}`, value)
     }
   }
 
   if ('search' in variables) {
-    url.searchParams = new URLSearchParams(variables.search)
+    url.search = new URLSearchParams(variables.search).toString()
   }
 
   const res = await fetch(url.toString(), {

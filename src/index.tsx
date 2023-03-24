@@ -171,7 +171,7 @@ export interface UseLazyApiOptions<
   cached?: boolean
   refetchOnFocus?: boolean
   variables?: TVariables
-  onFetch?: () => Promise<any>
+  onFetch?: () => any
   onCompleted?: (params: OnCompletedParams<T, TData, TError, TVariables, K>) => any
 }
 
@@ -334,6 +334,7 @@ function createUseApi<
     TApiVariables extends TVariables[K]
   >(key: K, opts: UseApiOptions<T, TData, TError, TVariables, K> = {}) {
     const { cache } = useContext(ctx)
+    const optsRef = useValueRef(opts)
     const {
       skip = false,
       force = false,
@@ -350,9 +351,11 @@ function createUseApi<
     const onFetch = useCallback(async () => {
       calledRef.current = true
       loadingRef.current = true
+      if (optsRef.current.onFetch) await optsRef.current.onFetch()
     }, [])
-    const onCompleted = useCallback(async () => {
+    const onCompleted = useCallback(async (params: OnCompletedParams<T, TData, TError, TVariables, K>) => {
       loadingRef.current = false
+      if (optsRef.current.onCompleted) await optsRef.current.onCompleted(params)
     }, [])
     const [fetch, result] =  useLazyApi<K, TApiData, TApiError, TApiVariables>(key, {
       ...lazyOpts,
