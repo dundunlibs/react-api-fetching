@@ -115,6 +115,7 @@ function createUseRevalidate<
 function createUseMutate<
   T,
   TData extends Record<keyof T, any>,
+  TError extends Record<keyof T, any>,
   TVariables extends Record<keyof T, any>
 >(ctx: React.Context<ApiContext<T>>) {
   return function useMutate() {
@@ -124,11 +125,11 @@ function createUseMutate<
       K extends keyof T,
       TApiData extends TData[K],
       TApiVariables extends TVariables[K]
-    >(key:K, variables: TApiVariables, callback: (prevData: TApiData) => TApiData) {
+    >(key:K, variables: TApiVariables, callback: (prevData: TApiData | null | undefined) => TApiData | null | undefined) {
       const cacheKey = generateCacheKey(key, variables)
-      const cacheData = cache.get(cacheKey) as TApiData
-      const data = callback(cacheData)
-      cache.set(cacheKey, data)
+      const cacheData = cache.get(cacheKey) as ApiResult<TApiData, TError[K]>
+      const data = callback(cacheData.data)
+      cache.set(cacheKey, { ...cacheData, data })
       return data
     }, [cache])
 
@@ -158,7 +159,7 @@ interface OnCompletedParams<
     X extends keyof T,
     TApiData extends TData[X],
     TApiVariables extends TVariables[X]
-  >(key: X, variables: TApiVariables, callback: (prevData: TApiData) => TApiData) => TApiData
+  >(key: X, variables: TApiVariables, callback: (prevData: TApiData | null | undefined) => TApiData | null | undefined) => TApiData | null | undefined
 }
 
 export interface UseLazyApiOptions<
@@ -182,7 +183,7 @@ function createUseLazyApi<
   TVariables extends Record<keyof T, any>
 >(ctx: React.Context<ApiContext<T>>, apis: T) {
   const useRevalidate = createUseRevalidate<T, TData, TError, TVariables>(ctx, apis)
-  const useMutate = createUseMutate<T, TData, TVariables>(ctx)
+  const useMutate = createUseMutate<T, TData, TError, TVariables>(ctx)
 
   return function useLazyApi<
     K extends keyof T,
@@ -371,7 +372,7 @@ function createUseApi<
 
     return {
       ...result,
-      loading: loadingRef.current,
+      loading: result.loading || loadingRef.current,
       called: calledRef.current
     }
   }
