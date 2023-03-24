@@ -112,6 +112,30 @@ function createUseRevalidate<
   }
 }
 
+function createUseMutate<
+  T,
+  TData extends Record<keyof T, any>,
+  TVariables extends Record<keyof T, any>
+>(ctx: React.Context<ApiContext<T>>) {
+  return function useMutate() {
+    const { cache } = useContext(ctx)
+
+    const mutate = useCallback(function<
+      K extends keyof T,
+      TApiData extends TData[K],
+      TApiVariables extends TVariables[K]
+    >(key:K, variables: TApiVariables, callback: (prevData: TApiData) => TApiData) {
+      const cacheKey = generateCacheKey(key, variables)
+      const cacheData = cache.get(cacheKey) as TApiData
+      const data = callback(cacheData)
+      cache.set(cacheKey, data)
+      return data
+    }, [cache])
+
+    return mutate
+  }
+}
+
 interface OnCompletedParams<
   T,
   TData extends Record<keyof T, any>,
@@ -130,6 +154,11 @@ interface OnCompletedParams<
     data: TApiData | null;
     error: TApiError | null;
   }>
+  mutate: <
+    X extends keyof T,
+    TApiData extends TData[X],
+    TApiVariables extends TVariables[X]
+  >(key: X, variables: TApiVariables, callback: (prevData: TApiData) => TApiData) => TApiData
 }
 
 export interface UseLazyApiOptions<
@@ -153,6 +182,8 @@ function createUseLazyApi<
   TVariables extends Record<keyof T, any>
 >(ctx: React.Context<ApiContext<T>>, apis: T) {
   const useRevalidate = createUseRevalidate<T, TData, TError, TVariables>(ctx, apis)
+  const useMutate = createUseMutate<T, TData, TVariables>(ctx)
+
   return function useLazyApi<
     K extends keyof T,
     TApiData extends TData[K],
@@ -160,6 +191,7 @@ function createUseLazyApi<
     TApiVariables extends TVariables[K],
   >(key: K, defaultOpts: UseLazyApiOptions<T, TData, TError, TVariables, K> = {}) {
     const revalidate = useRevalidate()
+    const mutate = useMutate()
     const fetchedRef = useRef(false)
     const defaultOptsRef = useValueRef(defaultOpts)
     const {
@@ -211,7 +243,7 @@ function createUseLazyApi<
         error = err as TApiError
       }
 
-      if (onCompleted) await onCompleted({ data, error, revalidate })
+      if (onCompleted) await onCompleted({ data, error, revalidate, mutate })
 
       fetchedRef.current = true
       prevResultRef.current = { data, error }
@@ -232,7 +264,7 @@ function createUseLazyApi<
       }
 
       return { data, error }
-    }, [key, cache, fetcher, setVariables, setLocalResult, revalidate])
+    }, [key, cache, fetcher, setVariables, setLocalResult, revalidate, mutate])
 
     const refetch = useCallback(() => fetch({ variables: prevVariablesRef.current }), [fetch])
 
