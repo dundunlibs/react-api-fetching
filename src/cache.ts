@@ -16,6 +16,12 @@ export class Cache {
   data: Record<string, ApiResult> = {}
   subscriptions: Record<string, (() => void)[]> = {}
 
+  initialize = <TData, TError>(key: string, value: ApiResult<TData, TError>) => {
+    if (!this.data[key]) {
+      this.data[key] = value
+    }
+  }
+
   get = <TData, TError>(key: string) => {
     return (this.data[key] || defaultResult) as ApiResult<TData, TError>
   }

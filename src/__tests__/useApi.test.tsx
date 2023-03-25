@@ -48,17 +48,15 @@ describe('useApi', () => {
 
     rerender({ skip: false })
 
-    await waitFor(() => new Promise(r => setTimeout(r, 10)))
+    await waitFor(() => expect(result.current.loading).toBeTruthy())
 
-    expect(result.current.called).toBeTruthy()
-    expect(result.current.loading).toBeTruthy()
     expect(result.current.data).toBeUndefined()
+    expect(result.current.called).toBeTruthy()
 
-    await waitFor(() => new Promise(r => setTimeout(r, 500)))
+    await waitFor(() => expect(result.current.loading).toBeFalsy())
 
-    expect(fetch).toHaveBeenCalledTimes(1)
-    expect(result.current.loading).toBeFalsy()
     expect(result.current.data).not.toBeUndefined()
+    expect(fetch).toHaveBeenCalledTimes(1)
   })
 
   it("automatically refetch if variables changed", async () => {

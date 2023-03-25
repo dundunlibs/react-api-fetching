@@ -1,7 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from 'react'
 import { deepEqual, deepMerge, generateConcurrentFn } from './utils'
-import { useValueRef, useEnhancedMemo, useCachedData, useEnhancedEffect } from './hooks'
-import { ApiResult, Cache, defaultResult, generateCacheKey, isCached } from './cache'
+import { useValueRef, useEnhancedMemo, useCachedData, useEnhancedEffect, useInitialize } from './hooks'
+import { Cache, defaultResult, generateCacheKey, isCached } from './cache'
+import type { ApiResult } from './cache'
+
 export { Cache } from './cache'
 
 export type ApiVariables<T extends Partial<Record<'body' | 'query' | 'body', any>> = {}> = T
@@ -347,21 +349,21 @@ function createUseApi<
     const cached = useMemo(() => isCached(cacheKey, cache), [cacheKey, cache])
 
     const calledRef = useRef(!skip || cached)
-    const loadingRef = useRef(!skip && !cached)
+
+    // set loading: true in first render
+    useInitialize(() => {
+      if (skip || cached) return
+      cache.initialize(cacheKey, { ...defaultResult, loading: true })
+    })
 
     const onFetch = useCallback(async () => {
       calledRef.current = true
-      loadingRef.current = true
       if (optsRef.current.onFetch) await optsRef.current.onFetch()
     }, [])
-    const onCompleted = useCallback(async (params: OnCompletedParams<T, TData, TError, TVariables, K>) => {
-      loadingRef.current = false
-      if (optsRef.current.onCompleted) await optsRef.current.onCompleted(params)
-    }, [])
+
     const [fetch, result] =  useLazyApi<K, TApiData, TApiError, TApiVariables>(key, {
       ...lazyOpts,
-      onFetch,
-      onCompleted
+      onFetch
     })
 
     useEffect(() => {
@@ -372,7 +374,6 @@ function createUseApi<
 
     return {
       ...result,
-      loading: result.loading || loadingRef.current,
       called: calledRef.current
     }
   }

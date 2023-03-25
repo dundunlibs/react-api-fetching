@@ -25,6 +25,10 @@ export function useRerender() {
   return rerender
 }
 
+export function useInitialize(initialize: () => void) {
+  useMemo(initialize, [])
+}
+
 export const useEnhancedEffect = canUseDOM ? useLayoutEffect : useEffect
 
 export function useCachedData(key: string, cache: Cache){
