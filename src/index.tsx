@@ -210,6 +210,13 @@ function createUseLazyApi<
     const prevVariablesRef = useRef<TApiVariables>()
     const cachedRef = useRef(defaultOpts.cached ?? true)
 
+    // update cacheKey when default variables changed
+    const defaultVariables = useEnhancedMemo(defaultOpts.variables)
+    useEnhancedEffect(() => {
+      if (deepEqual(variablesRef.current, defaultVariables)) return
+      setVariables((defaultVariables || {}) as TApiVariables)
+    }, [defaultVariables, setVariables])
+
     const fetch = useCallback(async (opts: Pick<UseLazyApiOptions<T, TData, TError, TVariables, K>, 'variables'> = {}) => {
       const api = apis[key]
       const {
