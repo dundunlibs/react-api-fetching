@@ -26,10 +26,11 @@ const RESPONSES = {
 
 export const fetch = jest.fn()
 
-function fetcher<T>(api: string, variables: ApiVariables) {
+function fetcher(api: string, variables: ApiVariables) {
   fetch(api, variables)
-  return new Promise<T>(resolve => {
-    setTimeout(() => resolve(RESPONSES[api as keyof typeof RESPONSES] as T), 50);
+  return new Promise(resolve => {
+    // @ts-ignore
+    setTimeout(() => resolve(RESPONSES[api as keyof typeof RESPONSES].slice(0, variables?.query?.limit as number)), 50);
   })
 }
 

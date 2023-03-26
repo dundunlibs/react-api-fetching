@@ -59,68 +59,93 @@ describe('useApi', () => {
     expect(fetch).toHaveBeenCalledTimes(1)
   })
 
-  it("automatically refetch if variables changed", async () => {
-    const { result, rerender } = renderHook((opts: UseApiOptions<any, any, any, any, any>) => Api.useApi('USERS', opts), {
-      initialProps: {
-        variables: {
-          query: { limit: 10 }
+  describe("change variables", () => {
+    it("don't automatically refetch if variables is equal with the previous one", async () => {
+      const { result, rerender } = renderHook((opts: UseApiOptions<any, any, any, any, any>) => Api.useApi('USERS', opts), {
+        initialProps: {
+          variables: {
+            query: { limit: 10 }
+          }
         }
-      }
+      })
+
+      await waitFor(() => {
+        expect(fetch).toHaveBeenLastCalledWith('/users', { query: { limit: 10 }})
+        expect(result.current.loading).toBeFalsy()
+      })
+
+      const latestData = result.current.data
+
+      rerender({ variables: { query: { limit: 10 } }})
+
+      await waitFor(() => new Promise(r => setTimeout(r, 10)))
+
+      expect(result.current.data).toBe(latestData)
+      expect(fetch).toHaveBeenCalledTimes(1)
     })
 
-    await waitFor(() => new Promise(r => setTimeout(r, 10)))
-
-    expect(fetch).toHaveBeenLastCalledWith('/users', { query: { limit: 10 }})
-    expect(result.current.loading).toBeTruthy()
-    expect(result.current.data).toBeUndefined()
-
-    await waitFor(() => new Promise(r => setTimeout(r, 500)))
-
-    expect(result.current.loading).toBeFalsy()
-    expect(result.current.data).not.toBeUndefined()
-
-    const latestData = result.current.data
-
-    rerender({ variables: { query: { limit: 20 } }})
-
-    await waitFor(() => new Promise(r => setTimeout(r, 10)))
-
-    expect(fetch).toHaveBeenLastCalledWith('/users', { query: { limit: 20 }})
-    expect(result.current.loading).toBeTruthy()
-    expect(result.current.data).toBe(latestData)
-
-    await waitFor(() => new Promise(r => setTimeout(r, 500)))
-
-    expect(result.current.loading).toBeFalsy()
-    expect(result.current.data).not.toBeUndefined()
-    expect(fetch).toHaveBeenCalledTimes(2)
-  })
-
-  it("don't automatically refetch if variables equal with previous variables", async () => {
-    const { result, rerender } = renderHook((opts: UseApiOptions<any, any, any, any, any>) => Api.useApi('USERS', opts), {
-      initialProps: {
-        variables: {
-          query: { limit: 10 }
+    it("automatically refetch if variables is not equal with the previous one", async () => {
+      const { result, rerender } = renderHook((opts: UseApiOptions<any, any, any, any, any>) => Api.useApi('USERS', opts), {
+        initialProps: {
+          variables: {
+            query: { limit: 10 }
+          }
         }
-      }
+      })
+
+      await waitFor(() => expect(fetch).toHaveBeenLastCalledWith('/users', { query: { limit: 10 }}))
+
+      expect(result.current.loading).toBeTruthy()
+      expect(result.current.data).toBeUndefined()
+
+      await waitFor(() => expect(result.current.loading).toBeFalsy())
+
+      expect(result.current.data).not.toBeUndefined()
+
+      const latestData = result.current.data
+
+      rerender({ variables: { query: { limit: 20 } }})
+
+      await waitFor(() => expect(fetch).toHaveBeenLastCalledWith('/users', { query: { limit: 20 }}))
+
+      expect(result.current.loading).toBeTruthy()
+      expect(result.current.data).toBe(latestData)
+
+      await waitFor(() => expect(result.current.loading).toBeFalsy())
+
+      expect(result.current.data).not.toBeUndefined()
+      expect(fetch).toHaveBeenCalledTimes(2)
     })
 
-    await waitFor(() => new Promise(r => setTimeout(r, 10)))
+    it("don't refetch and return result if it's already cached", async () => {
+      const { result, rerender } = renderHook((opts: UseApiOptions<any, any, any, any, any>) => Api.useApi('USERS', opts), {
+        initialProps: {
+          variables: {
+            query: { limit: 1 }
+          }
+        }
+      })
 
-    expect(fetch).toHaveBeenLastCalledWith('/users', { query: { limit: 10 }})
+      await waitFor(() => expect(fetch).toHaveBeenLastCalledWith('/users', { query: { limit: 1 }}))
+      await waitFor(() => expect(result.current.data).not.toBeUndefined())
 
-    await waitFor(() => new Promise(r => setTimeout(r, 500)))
+      const firstData = result.current.data
 
-    expect(result.current.loading).toBeFalsy()
+      rerender({ variables: { query: { limit: 2 } }})
 
-    const latestData = result.current.data
+      await waitFor(() => {
+        expect(result.current.loading).toBeTruthy()
+        expect(fetch).toHaveBeenLastCalledWith('/users', { query: { limit: 2 }})
+      })
 
-    rerender({ variables: { query: { limit: 10 } }})
+      await waitFor(() => expect(result.current.loading).toBeFalsy())
 
-    await waitFor(() => new Promise(r => setTimeout(r, 10)))
+      expect(result.current.data).not.toEqual(firstData)
+      expect(fetch).toHaveBeenCalledTimes(2)
 
-    expect(result.current.data).toBe(latestData)
-    expect(fetch).toHaveBeenCalledTimes(1)
+      rerender({ variables: { query: { limit: 1 } }})
+      expect(result.current.data).toEqual(firstData)
+    })
   })
 
   it ("don't fetch if result is already cached", async () => {
