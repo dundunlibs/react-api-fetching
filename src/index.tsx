@@ -6,6 +6,8 @@ import type { ApiResult } from './cache'
 
 export { Cache } from './cache'
 
+export { generateConcurrentFn }
+
 export type ApiVariables<T extends Partial<Record<'body' | 'query' | 'body', any>> = {}> = T
 
 interface ApiConfig<APIs> {
@@ -80,12 +82,12 @@ function createUseRevalidate<
   return function useRevalidate() {
     const { cache, config: { fetcher } } = useContext(ctx)
 
-    const revalidate = useCallback(async function<
+    const revalidate = useCallback(async function <
       K extends keyof T,
       TApiData extends TData[K],
       TApiError extends TError[K],
       TApiVariables extends TVariables[K]
-    >(key:K, variables: TApiVariables) {
+    >(key: K, variables: TApiVariables) {
       const cacheKey = generateCacheKey(key, variables)
       const cacheData = cache.get(cacheKey)
 
@@ -123,11 +125,15 @@ function createUseMutate<
   return function useMutate() {
     const { cache } = useContext(ctx)
 
-    const mutate = useCallback(function<
+    const mutate = useCallback(function <
       K extends keyof T,
       TApiData extends TData[K],
       TApiVariables extends TVariables[K]
+<<<<<<< Updated upstream
     >(key:K, variables: TApiVariables, callback: (prevData: TApiData | null | undefined) => TApiData | null | undefined) {
+=======
+    >(key: K, variables: TApiVariables, callback: (prevData: TApiData) => TApiData) {
+>>>>>>> Stashed changes
       const cacheKey = generateCacheKey(key, variables)
       const cacheData = cache.get(cacheKey) as ApiResult<TApiData, TError[K]>
       const data = callback(cacheData.data)
@@ -367,8 +373,12 @@ function createUseApi<
       calledRef.current = true
       if (optsRef.current.onFetch) await optsRef.current.onFetch()
     }, [])
+<<<<<<< Updated upstream
 
     const [fetch, result] =  useLazyApi<K, TApiData, TApiError, TApiVariables>(key, {
+=======
+    const [fetch, result] = useLazyApi<K, TApiData, TApiError, TApiVariables>(key, {
+>>>>>>> Stashed changes
       ...lazyOpts,
       onFetch
     })
